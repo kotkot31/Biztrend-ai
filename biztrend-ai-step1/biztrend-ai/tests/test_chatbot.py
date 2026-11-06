@@ -1,8 +1,9 @@
 import logging
 
 import pandas as pd
+import pytest
 
-from biztrend import chatbot, data
+from biztrend import chatbot, data, help_content
 
 
 def _monthly_sales(values, product="Keyboard"):
@@ -119,6 +120,71 @@ def test_answers_profit_change_from_last_two_periods():
     assert response.evidence["expense_change"] == 40
 
 
+def test_expense_category_question_returns_period_breakdown_and_chart():
+    rows = [{
+        "date": date,
+        "record_type": "expense",
+        "product": "",
+        "category": category,
+        "quantity": 1,
+        "unit_price": amount,
+        "amount": amount,
+        "notes": "",
+    } for date, category, amount in [
+        ("2025-01-15", "Rent", 100),
+        ("2025-01-15", "Cost of Goods", 50),
+        ("2025-02-15", "Rent", 200),
+        ("2025-02-15", "Cost of Goods", 50),
+        ("2025-02-15", "Utilities", 50),
+    ]]
+    transactions, _ = data.clean_transactions(pd.DataFrame(rows))
+
+    response = chatbot.answer_question("Review expense categories", transactions)
+
+    assert response.status == "answered"
+    assert response.category == "expenses"
+    assert "February 2025" in response.answer
+    assert "Rent: 200.00 (66.7%; change +100.00)" in response.answer
+    assert response.evidence["total_expenses"] == 300
+    rent = next(row for row in response.evidence["categories"] if row["category"] == "Rent")
+    assert rent["expense_type"] == "Operating expense"
+    assert rent["previous_amount"] == 100
+    assert rent["change_amount"] == 100
+    assert response.chart is not None
+    assert response.chart.kind == "bar"
+
+
+def test_expense_category_chatbot_handles_missing_and_zero_previous_expenses():
+    rows = [{
+        "date": date,
+        "record_type": "expense",
+        "product": "",
+        "category": category,
+        "quantity": 1,
+        "unit_price": amount,
+        "amount": amount,
+        "notes": "",
+    } for date, category, amount in [
+        ("2025-01-15", "Rent", 100),
+        ("2025-02-15", "Utilities", 50),
+    ]]
+    transactions, _ = data.clean_transactions(pd.DataFrame(rows))
+    response = chatbot.answer_question("Show expenses by category", transactions)
+    utilities = next(
+        row for row in response.evidence["categories"]
+        if row["category"] == "Utilities"
+    )
+    assert utilities["previous_amount"] == 0
+    assert utilities["share_pct"] == 100
+    assert "Utilities: 50.00 (100.0%; new)" in response.answer
+    assert response.status == "answered"
+
+    sales_only = _monthly_sales([2, 4])
+    missing = chatbot.answer_question("Review expense categories", sales_only)
+    assert missing.status == "insufficient_data"
+    assert "couldn't find recorded expenses" in missing.answer
+
+
 def test_answers_profit_margins_and_refuses_unsupported_date_filter():
     rows = [{
         "date": date,
@@ -226,7 +292,54 @@ def test_chatbot_answers_app_help_without_transaction_data():
 def test_chatbot_answers_general_help_from_guide():
     transactions = _monthly_sales([1, 2, 3])
 
-    response = chatbot.answer_question("What is BizTrend AI?", transactions)
+    response = chatbot.answer_question("What is BizTrend?", transactions)
+
+    assert response.status == "answered"
+    assert response.category == "help"
+    assert response.answer.startswith("BizTrend AI is a business analytics")
+    assert "forecasts product demand" in response.answer
+    assert "inventory replenishment" in response.answer
+    assert "unusual activity" in response.answer
+    assert "does not place orders" in response.answer
+    assert len(response.answer) < 400
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "BizTrend",
+        "BizTrend AI",
+        "What is BizTrend?",
+        "What is the BizTrend AI app?",
+        "Tell me about BizTrend",
+        "Explain BizTrend AI",
+        "What does BizTrend do?",
+        "What can BizTrend AI help me with?",
+        "BizTrend AI features",
+        "What are the capabilities of BizTrend?",
+        "What is BizTrend used for?",
+    ],
+)
+def test_biztrend_name_and_common_description_questions_return_app_summary(question):
+    empty = pd.DataFrame(columns=data.TRANSACTION_COLUMNS)
+    response = chatbot.answer_question(question, empty)
+
+    assert response.status == "answered"
+    assert response.category == "help"
+    assert response.answer.startswith("BizTrend AI is a business analytics")
+    assert "forecasts product demand" in response.answer
+
+
+def test_biztrend_business_data_question_is_not_routed_to_app_description():
+    response = help_content.answer_for_question("What is my revenue in BizTrend?")
+
+    assert response is None
+
+
+def test_chatbot_generic_help_still_shows_guide_intro():
+    transactions = _monthly_sales([1, 2, 3])
+
+    response = chatbot.answer_question("help", transactions)
 
     assert response.status == "answered"
     assert response.category == "help"
@@ -287,5 +400,30 @@ def test_unexpected_error_is_logged_and_returns_retry_message(monkeypatch, caplo
     assert response.status == "error"
     assert "couldn't finish that answer" in response.answer
     assert "Your data hasn't been changed" in response.answer
-    assert len(response.suggestions) == 3
+    assert response.answer == chatbot.UNEXPECTED_ERROR_MESSAGE
+    assert not response.suggestions
     assert "internal detail" in caplog.text
+
+
+def test_streamlit_exception_is_converted_to_the_neutral_chat_message(monkeypatch, caplog):
+    from streamlit.errors import StreamlitAPIException
+
+    transactions = _monthly_sales([1, 2, 3])
+    expense, _ = data.clean_transactions(pd.DataFrame([{
+        "date": "2025-03-15",
+        "record_type": "expense",
+        "category": "Rent",
+        "amount": 100,
+    }]))
+    transactions = pd.concat([transactions, expense], ignore_index=True)
+
+    def fail(_transactions, _freq):
+        raise StreamlitAPIException("internal Streamlit detail")
+
+    monkeypatch.setattr(chatbot.analytics, "financial_performance", fail)
+    with caplog.at_level(logging.ERROR, logger="biztrend.chatbot"):
+        response = chatbot.answer_question("Review expense categories", transactions)
+
+    assert response.status == "error"
+    assert response.answer == chatbot.UNEXPECTED_ERROR_MESSAGE
+    assert "internal Streamlit detail" in caplog.text

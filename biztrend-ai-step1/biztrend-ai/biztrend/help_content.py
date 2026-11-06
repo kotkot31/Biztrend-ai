@@ -5,6 +5,34 @@ import re
 from pathlib import Path
 
 _GUIDE_PATH = Path(__file__).resolve().parents[1] / "HELP.md"
+_APP_DESCRIPTION_REQUEST = re.compile(
+    r"^\s*(?:"
+    r"(?:what is|what's|who is)\s+(?:the\s+)?biztrend(?:\s+ai)?"
+    r"(?:\s+(?:app|platform|system))?"
+    r"|(?:tell me about|describe|explain|give me an overview of)\s+"
+    r"(?:the\s+)?biztrend(?:\s+ai)?(?:\s+(?:app|platform|system))?"
+    r"|what does\s+(?:the\s+)?biztrend(?:\s+ai)?(?:\s+app)?\s+do"
+    r"|what can\s+(?:the\s+)?biztrend(?:\s+ai)?(?:\s+app)?\s+"
+    r"(?:do|help me with)"
+    r"|biztrend(?:\s+ai)?\s+(?:app\s+)?(?:features?|capabilities|"
+    r"core functions|overview|purpose)"
+    r"|(?:features?|capabilities|core functions|overview)\s+of\s+"
+    r"(?:the\s+)?biztrend(?:\s+ai)?"
+    r"|what are (?:the\s+)?(?:features?|capabilities|core functions)\s+of\s+"
+    r"(?:the\s+)?biztrend(?:\s+ai)?"
+    r"|what is\s+(?:the\s+)?biztrend(?:\s+ai)?\s+"
+    r"(?:used for|designed for)"
+    r"|biztrend(?:\s+ai)?"
+    r")\s*[?.!]*$",
+    re.IGNORECASE,
+)
+_APP_DESCRIPTION = (
+    "BizTrend AI is a business analytics and decision-support app. It analyzes "
+    "sales, expenses, and profit; forecasts product demand; estimates inventory "
+    "replenishment needs; flags unusual activity; and provides evidence-backed "
+    "business insights. Its results are advisory, and it does not place orders or "
+    "execute financial transactions."
+)
 _HELP_REQUEST = re.compile(
     r"\bhelp\b|\buser guide\b|\bhow[- ]to\b|\bhow to\b|\bhow do i\b|"
     r"\bhow can i\b|\bwhere can i\b|\bwhere do i\b|\bhow does (?:the )?app\b|"
@@ -70,6 +98,9 @@ def _section(guide: str, title: str) -> str:
 
 def answer_for_question(question: str) -> str | None:
     """Return a relevant guide section for an explicit app-help question."""
+    if _APP_DESCRIPTION_REQUEST.search(question) is not None:
+        return _APP_DESCRIPTION
+
     if _HELP_REQUEST.search(question) is None:
         return None
 

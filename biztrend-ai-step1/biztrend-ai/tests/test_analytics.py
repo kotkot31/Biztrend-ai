@@ -53,6 +53,39 @@ def test_sales_trends_support_periods_and_fill_missing_sales(transactions):
         analytics.sales_trends(transactions, "hourly")
 
 
+def test_expense_category_breakdown_cleans_labels_and_classifies_cogs(transactions):
+    rows = pd.DataFrame([{
+        "date": "2026-03-15",
+        "record_type": "expense",
+        "category": "   ",
+        "amount": 25,
+    }])
+    uncategorized, _ = data.clean_transactions(rows)
+    combined = pd.concat([transactions, uncategorized], ignore_index=True)
+
+    result = analytics.expense_category_breakdown(combined, "monthly")
+
+    january = result[result["period"] == pd.Timestamp("2026-01-01")]
+    assert january[["category", "expense_type", "amount"]].values.tolist() == [
+        ["Cost of Goods", "Cost of goods", 400],
+        ["Rent", "Operating expense", 100],
+    ]
+    march = result[result["period"] == pd.Timestamp("2026-03-01")]
+    uncategorized = march[march["category"] == "Uncategorized"].iloc[0]
+    assert uncategorized["expense_type"] == "Operating expense"
+    assert uncategorized["amount"] == 25
+
+
+def test_expense_category_breakdown_handles_empty_and_no_expense_data(transactions):
+    empty = pd.DataFrame(columns=data.TRANSACTION_COLUMNS)
+    assert analytics.expense_category_breakdown(empty).empty
+
+    sales_only = transactions[transactions["record_type"] == "sale"]
+    result = analytics.expense_category_breakdown(sales_only)
+    assert list(result.columns) == ["period", "category", "expense_type", "amount"]
+    assert result.empty
+
+
 def test_financial_performance_calculates_profit_margins_and_warning(transactions):
     result = analytics.financial_performance(transactions, "monthly")
     january, february, march = result.iloc[0], result.iloc[1], result.iloc[2]

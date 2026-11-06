@@ -24,6 +24,10 @@ DEFAULT_FORECAST_PERIODS = 3
 MAX_ANOMALY_TRANSACTIONS = 20_000
 MAX_CHAT_TRANSACTIONS = 100_000
 MAX_INVENTORY_PRODUCTS = 1_000
+UNEXPECTED_ERROR_MESSAGE = (
+    "I couldn't finish that answer just now. Your data hasn't been changed. "
+    "Please try again, or ask about sales, expenses, forecasts, or inventory."
+)
 SUPPORTED_TOPICS = (
     "sales and product performance, expenses and profit, demand forecasts, "
     "inventory, unusual transactions, and rule-based business recommendations"
@@ -44,6 +48,12 @@ _INTENT_TERMS = {
     "financial": (
         "profit", "profitability", "expense", "expenses", "cost", "costs",
         "margin", "loss", "p&l", "financial",
+    ),
+    "expense_analysis": (
+        "expense categor", "expense breakdown", "expense analysis",
+        "expense trend", "spending by categor", "spend by categor",
+        "expenses by categor", "expense by categor",
+        "review expense", "top expenses", "cost breakdown",
     ),
     "sales": (
         "sales", "sale", "revenue", "product", "top", "best-selling",
@@ -174,7 +184,10 @@ def _detect_intent(question: str) -> str | None:
         return matches[0]
     if len(matches) > 1:
         # Prefer specific data domains over generic recommendation wording.
-        priority = ("inventory", "anomaly", "forecast", "financial", "sales")
+        priority = (
+            "inventory", "anomaly", "forecast", "expense_analysis",
+            "financial", "sales",
+        )
         for intent in priority:
             if intent in matches:
                 return intent
@@ -470,6 +483,128 @@ def _answer_financial(
             x="period",
             y=("revenue", "total_expenses", "net_profit"),
             title="Revenue, expenses, and net profit",
+        ),
+    )
+
+
+def _answer_expenses(
+    transactions: pd.DataFrame,
+    freq: str,
+    date_range: str,
+) -> ChatResponse:
+    breakdown = analytics.expense_category_breakdown(transactions, freq)
+    if breakdown.empty:
+        return _fallback(
+            "insufficient_data",
+            "I couldn't find recorded expenses to break down by category. "
+            "Add expense records with categories and try again.",
+            "expenses",
+        )
+
+    financial = analytics.financial_performance(transactions, freq)
+    latest_period = financial.index[-1]
+    previous_period = financial.index[-2] if len(financial) >= 2 else None
+    latest = breakdown[breakdown["period"] == latest_period].copy()
+    previous = (
+        breakdown[breakdown["period"] == previous_period]
+        if previous_period is not None
+        else breakdown.iloc[0:0]
+    )
+    latest_total = float(latest["amount"].sum())
+    previous_total = float(previous["amount"].sum())
+    latest["share_pct"] = (
+        latest["amount"] / latest_total * 100 if latest_total else 0.0
+    )
+    previous_by_category = previous.set_index("category")["amount"]
+    latest["previous_amount"] = (
+        latest["category"].map(previous_by_category).fillna(0.0)
+    )
+    latest["change_amount"] = latest["amount"] - latest["previous_amount"]
+    current_by_category = latest.set_index("category")["amount"]
+    comparison = pd.DataFrame([
+        {
+            "category": category,
+            "expense_type": (
+                latest.set_index("category")["expense_type"].get(category)
+                or previous.set_index("category")["expense_type"].get(category)
+            ),
+            "amount": float(current_by_category.get(category, 0.0)),
+            "previous_amount": float(previous_by_category.get(category, 0.0)),
+        }
+        for category in sorted(set(latest["category"]) | set(previous["category"]))
+    ])
+    if not comparison.empty:
+        comparison["share_pct"] = (
+            comparison["amount"] / latest_total * 100 if latest_total else 0.0
+        )
+        comparison["change_amount"] = (
+            comparison["amount"] - comparison["previous_amount"]
+        )
+        comparison = comparison.sort_values(
+            ["amount", "previous_amount"], ascending=False
+        ).head(10)
+
+    if latest.empty:
+        answer = (
+            f"No expenses were recorded in the latest {freq} period, "
+            f"{_period_label(latest_period, freq)}. "
+        )
+    else:
+        top_categories = latest.nlargest(10, "amount")
+        categories = ", ".join(
+            (
+                f"{row.category}: {row.amount:,.2f} ({row.share_pct:.1f}%; "
+                f"change {row.change_amount:+,.2f})"
+                if row.previous_amount > 0
+                else f"{row.category}: {row.amount:,.2f} ({row.share_pct:.1f}%; new)"
+            )
+            for row in top_categories.itertuples(index=False)
+        )
+        answer = (
+            f"Expenses in {_period_label(latest_period, freq)} totaled "
+            f"{latest_total:,.2f}. Top categories: {categories}. "
+        )
+
+    if previous_period is not None:
+        answer += (
+            f"Previous-period expenses "
+            f"({_period_label(previous_period, freq)}) totaled "
+            f"{previous_total:,.2f}. "
+        )
+    answer += date_range
+
+    chart_frame = latest.nlargest(10, "amount")[["category", "amount"]].sort_values(
+        "amount", ascending=True
+    )
+    return ChatResponse(
+        status="answered",
+        category="expenses",
+        answer=answer,
+        evidence={
+            "period": _period_label(latest_period, freq),
+            "total_expenses": latest_total,
+            "previous_period": (
+                _period_label(previous_period, freq)
+                if previous_period is not None
+                else None
+            ),
+            "previous_total_expenses": previous_total,
+            "categories": comparison.to_dict(orient="records"),
+        },
+        suggestions=(
+            "Compare category changes with the previous period and your budget.",
+            "Review uncategorized expenses and confirm cost-of-goods entries are labeled consistently.",
+        ),
+        chart=(
+            _evidence_chart(
+                chart_frame,
+                kind="bar",
+                x="amount",
+                y=("category",),
+                title=f"Expense categories — {_period_label(latest_period, freq)}",
+            )
+            if not chart_frame.empty
+            else None
         ),
     )
 
@@ -895,6 +1030,8 @@ def _answer_question(
         return _answer_sales(transactions, normalized, products, freq, date_range)
     if intent == "financial":
         return _answer_financial(transactions, normalized, products, freq, date_range)
+    if intent == "expense_analysis":
+        return _answer_expenses(transactions, freq, date_range)
     if intent == "forecast":
         return _answer_forecast(transactions, normalized, products, freq, date_range)
     if intent == "inventory":
@@ -942,13 +1079,5 @@ def answer_question(
         return ChatResponse(
             status="error",
             category="error",
-            answer=(
-                "I couldn't finish that answer just now. Your data hasn't been changed. "
-                "Please try again, or ask about sales, expenses, forecasts, or inventory."
-            ),
-            suggestions=(
-                "Which products generated the most revenue?",
-                "How did profit change in the latest periods?",
-                "What does the demand forecast show?",
-            ),
+            answer=UNEXPECTED_ERROR_MESSAGE,
         )

@@ -49,12 +49,13 @@ Period-based profit compares revenue and expenses recorded in the same period. T
 ## Dashboard pages
 
 - **Overview:** all-time revenue and units sold, latest-period net profit, products tracked, revenue trend, top products, and latest-period financial details. Hover over the overview cards for their date coverage and supporting details.
-- **Sales & finance:** sales and unit trends, product performance, and a profit-and-loss view with revenue, expenses, and net profit.
+- **Executive summary:** selected-period revenue, profit, margin, revenue change, inventory review count, the largest expense category, and a short list of prioritized insights with recommendations and supporting evidence. Forecasts and recommendations are advisory and depend on available data.
+- **Sales & finance:** sales and unit trends, product performance, a profit-and-loss view, and an Expense analysis tab. Expense analysis shows category amounts and shares, separates Cost of Goods from operating expenses, and compares categories with the previous period. Blank categories appear as “Uncategorized”; percentage changes are not shown when the prior amount is zero.
 - **Forecasting:** choose all products or one product and forecast between 1 and 24 future periods. The page shows predicted units, the selected model, validation error (MAE), and available history.
 - **Inventory:** review stock, lead-time demand, reorder points, and estimated replenishment quantities for products in the catalog.
 - **Anomaly review:** inspect unusual transaction amounts or quantities and unusual daily product demand.
 - **Business assistant:** review evidence-backed, rule-based business insights and suggested next steps.
-- **Chatbot:** ask about business data, or ask how to use BizTrend AI. For example: “Which products generated the most revenue?”, “How did profit change in the latest periods?”, or “How do I upload a CSV?”
+- **Chatbot:** ask about business data, or ask how to use BizTrend AI. For example: “Which products generated the most revenue?”, “Review expense categories”, “How did profit change in the latest periods?”, or “How do I upload a CSV?”
 - **Data management:** import CSVs, add transactions, manage products, and clear test data from the selected writable source.
 - **Help & guide:** read this guide inside the app.
 

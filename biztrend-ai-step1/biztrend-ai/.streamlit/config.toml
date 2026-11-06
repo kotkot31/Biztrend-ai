@@ -2,25 +2,25 @@
 font = "sans serif"
 
 [theme.light]
-primaryColor = "#12A594"
-backgroundColor = "#F3F7FB"
+primaryColor = "#168B83"
+backgroundColor = "#F4F7FA"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#17324D"
+textColor = "#20344A"
 
 [theme.light.sidebar]
-primaryColor = "#48D8C0"
-backgroundColor = "#123B63"
-secondaryBackgroundColor = "#145B73"
-textColor = "#F4FBFF"
+primaryColor = "#71D7C5"
+backgroundColor = "#183B58"
+secondaryBackgroundColor = "#20536A"
+textColor = "#F2F7FC"
 
 [theme.dark]
-primaryColor = "#48D8C0"
-backgroundColor = "#0D1722"
-secondaryBackgroundColor = "#142231"
-textColor = "#E8F1F8"
+primaryColor = "#64D2BF"
+backgroundColor = "#111B27"
+secondaryBackgroundColor = "#192737"
+textColor = "#E7EEF5"
 
 [theme.dark.sidebar]
-primaryColor = "#48D8C0"
-backgroundColor = "#101E2B"
-secondaryBackgroundColor = "#152C39"
-textColor = "#E8F1F8"
+primaryColor = "#64D2BF"
+backgroundColor = "#142332"
+secondaryBackgroundColor = "#1A3543"
+textColor = "#E7EEF5"

@@ -78,6 +78,38 @@ def sales_trends(df: pd.DataFrame, freq: str = "monthly") -> pd.DataFrame:
     return result.rename_axis("period")
 
 
+def expense_category_breakdown(
+    df: pd.DataFrame,
+    freq: str = "monthly",
+) -> pd.DataFrame:
+    """Return expenses grouped by period and category with COGS classification."""
+    alias = _validate_frequency(freq)
+    columns = ["period", "category", "expense_type", "amount"]
+    expenses = df[df["record_type"] == "expense"].copy()
+    if expenses.empty:
+        return pd.DataFrame(columns=columns)
+
+    expenses["category"] = (
+        expenses["category"].fillna("").astype(str).str.strip()
+        .replace("", "Uncategorized")
+    )
+    is_cogs = expenses["category"].str.casefold() == config.COGS_CATEGORY.casefold()
+    expenses["expense_type"] = "Operating expense"
+    expenses.loc[is_cogs, "expense_type"] = "Cost of goods"
+    result = (
+        expenses.groupby(
+            [pd.Grouper(key="date", freq=alias), "category", "expense_type"],
+            as_index=False,
+        )["amount"]
+        .sum()
+        .rename(columns={"date": "period"})
+    )
+    return result[columns].sort_values(
+        ["period", "amount", "category"],
+        ascending=[True, False, True],
+    ).reset_index(drop=True)
+
+
 def financial_performance(df: pd.DataFrame, freq: str = "monthly") -> pd.DataFrame:
     """Return period P&L, margins, and operating-expense growth warnings.
 
