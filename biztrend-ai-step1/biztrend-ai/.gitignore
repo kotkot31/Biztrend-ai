@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.streamlit/secrets.toml
+.env
+# Your real business data stays local
+data/transactions.csv
+data/products.csv
+# Keep sample data in git
+!data/sample_transactions.csv
+!data/sample_products.csv
