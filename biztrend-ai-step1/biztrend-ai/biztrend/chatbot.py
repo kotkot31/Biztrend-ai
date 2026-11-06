@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -742,17 +743,18 @@ def _answer_inventory(
     messages = []
     evidence = []
     for row in rows.itertuples(index=False):
+        display_reorder_point = math.ceil(row.reorder_point)
         evidence.append({
             "product": row.product,
             "status": row.reorder_status,
             "stock_on_hand": float(row.stock_on_hand),
-            "reorder_point": float(row.reorder_point),
+            "reorder_point": display_reorder_point,
             "recommended_order_qty": int(row.recommended_order_qty),
         })
         if row.reorder_status == "reorder":
             messages.append(
                 f"{row.product}: stock {row.stock_on_hand:g}, estimated reorder "
-                f"point {row.reorder_point:.1f}; review the suggested "
+                f"point {display_reorder_point:,}; review the suggested "
                 f"{row.recommended_order_qty} units"
             )
         elif row.reorder_status in {"no_sales", "insufficient_history"}:
@@ -763,7 +765,7 @@ def _answer_inventory(
         else:
             messages.append(
                 f"{row.product}: stock {row.stock_on_hand:g} is above the "
-                f"estimated reorder point {row.reorder_point:.1f}"
+                f"estimated reorder point {display_reorder_point:,}"
             )
     chart_frame = pd.DataFrame(evidence)
     return ChatResponse(

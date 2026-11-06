@@ -1,9 +1,10 @@
 import logging
+import math
 
 import pandas as pd
 import pytest
 
-from biztrend import chatbot, data, help_content
+from biztrend import chatbot, data, help_content, inventory
 
 
 def _monthly_sales(values, product="Keyboard"):
@@ -255,6 +256,25 @@ def test_inventory_recommendation_is_advisory():
     assert response.evidence["inventory"][0]["recommended_order_qty"] > 0
     assert response.chart is not None
     assert response.chart.kind == "bar"
+
+
+def test_inventory_chatbot_rounds_displayed_reorder_point_up():
+    transactions = _daily_sales([2, 8] * 5)
+    products = pd.DataFrame([{
+        "product": "Keyboard",
+        "unit_cost": 3,
+        "stock_on_hand": 0,
+        "lead_time_days": 3,
+    }])
+    expected = inventory.inventory_recommendations(
+        transactions, products
+    ).iloc[0]["reorder_point"]
+
+    response = chatbot.answer_question("Should I reorder Keyboard?", transactions, products)
+
+    assert response.evidence["inventory"][0]["reorder_point"] == math.ceil(expected)
+    assert response.chart.data[0]["reorder_point"] == math.ceil(expected)
+    assert f"reorder point {math.ceil(expected):,}" in response.answer
 
 
 def test_out_of_scope_ambiguous_and_empty_data_get_friendly_fallbacks():

@@ -75,6 +75,29 @@ def test_sales_and_finance_page_renders_expense_analysis_tab():
     assert expense_trend["data"][0]["marker"]["color"] == financial_colors[1]
 
 
+def test_inventory_page_displays_whole_unit_estimates_and_formatted_costs():
+    app_path = Path(__file__).resolve().parents[1] / "app.py"
+    app = AppTest.from_file(str(app_path), default_timeout=20).run()
+    app.radio[0].set_value("Sample demo")
+    app.radio[1].set_value("Inventory")
+    app.run(timeout=20)
+
+    assert not app.exception
+    displayed = app.dataframe[0].value
+    for column in (
+        "average_daily_demand",
+        "daily_demand_std",
+        "expected_lead_time_demand",
+        "safety_stock",
+        "reorder_point",
+    ):
+        assert displayed[column].mod(1).eq(0).all()
+
+    column_config = json.loads(app.dataframe[0].proto.columns)
+    assert column_config["unit_cost"]["type_config"]["format"] == "%,.2f"
+    assert column_config["estimated_order_cost"]["type_config"]["format"] == "%,.2f"
+
+
 def test_merge_transactions_adds_new_rows_and_skips_duplicates():
     existing, _ = data.clean_transactions(pd.DataFrame([{
         "date": "2026-01-01",

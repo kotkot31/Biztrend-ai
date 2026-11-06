@@ -65,7 +65,7 @@ Forecasts estimate future **units sold**, not future revenue or profit. The app 
 
 ## Inventory
 
-Inventory recommendations use recorded stock, product unit cost, supplier lead time, and estimated demand. Missing product details or insufficient sales history can prevent a recommendation. Review the inputs and recommendation in context; the app never places an order or commits a purchase.
+Inventory recommendations use recorded stock, product unit cost, supplier lead time, and estimated demand. Demand estimates, safety stock, and reorder points are rounded up to whole units for display; calculations retain their full precision, and order quantities are whole units. Costs use comma separators and two decimal places. Missing product details or insufficient sales history can prevent a recommendation. Review the inputs and recommendation in context; the app never places an order or commits a purchase.
 
 ## Anomaly review
 

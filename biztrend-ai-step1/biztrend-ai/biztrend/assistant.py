@@ -1,6 +1,8 @@
 """Explainable, rule-based business insights from BizTrend analysis outputs."""
 from __future__ import annotations
 
+import math
+
 from dataclasses import dataclass
 
 import pandas as pd
@@ -195,7 +197,7 @@ def _generate_insights(
                 title=f"Review replenishment for {item.product}",
                 explanation=(
                     f"Recorded stock ({item.stock_on_hand:g}) is at or below "
-                    f"the estimated reorder point ({item.reorder_point:.1f})."
+                    f"the estimated reorder point ({math.ceil(item.reorder_point):,})."
                 ),
                 recommended_action=(
                     f"Review the suggested {item.recommended_order_qty} units "

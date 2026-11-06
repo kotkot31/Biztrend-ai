@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import math
 
 import pandas as pd
 import plotly.express as px
@@ -911,7 +912,25 @@ def _render_inventory(transactions: pd.DataFrame, products: pd.DataFrame) -> Non
     cols[0].metric("Products analyzed", len(result))
     cols[1].metric("At/below reorder point", len(reorder))
     cols[2].metric("Insufficient demand history", len(insufficient))
-    st.dataframe(result, use_container_width=True, hide_index=True)
+    display_result = result.copy()
+    unit_columns = [
+        "average_daily_demand",
+        "daily_demand_std",
+        "expected_lead_time_demand",
+        "safety_stock",
+        "reorder_point",
+    ]
+    for column in unit_columns:
+        display_result[column] = display_result[column].map(math.ceil)
+    st.dataframe(
+        display_result,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "unit_cost": st.column_config.NumberColumn(format="%,.2f"),
+            "estimated_order_cost": st.column_config.NumberColumn(format="%,.2f"),
+        },
+    )
     if not reorder.empty:
         st.warning("Replenishment quantities are estimates for review only. No orders have been placed.")
 
