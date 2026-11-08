@@ -4,7 +4,7 @@ import math
 import pandas as pd
 import pytest
 
-from biztrend import chatbot, data, help_content, inventory
+from biztrend import chatbot, data, help_content, inventory, sample_data
 
 
 def _monthly_sales(values, product="Keyboard"):
@@ -184,6 +184,84 @@ def test_expense_category_chatbot_handles_missing_and_zero_previous_expenses():
     missing = chatbot.answer_question("Review expense categories", sales_only)
     assert missing.status == "insufficient_data"
     assert "couldn't find recorded expenses" in missing.answer
+
+
+def test_suggested_questions_match_supported_chatbot_intents():
+    transactions, products = sample_data.generate("2025-01-01", "2026-10-31")
+    quiet_transactions = _daily_sales([2] * 10)
+    source_questions = [
+        ("How did profit change in the latest periods?", transactions),
+        ("Review expense categories", transactions),
+        ("Are there unusual transactions?", quiet_transactions),
+        ("What business actions should I review?", transactions),
+        ("What is BizTrend?", transactions),
+        ("?", transactions),
+    ]
+    suggestions = {
+        suggestion
+        for source_question, source_data in source_questions
+        for suggestion in chatbot.answer_question(
+            source_question, source_data, products
+        ).suggestions
+    }
+    expected_categories = {
+        "Which products generated the most revenue?": "sales",
+        "How did profit change in the latest periods?": "financial",
+        "What does the demand forecast show?": "forecast",
+        "Which expense category had the highest amount?": "expenses",
+        "Which expense category had the lowest amount?": "expenses",
+        "Are there unusual transactions?": "anomaly",
+        "What business actions should I review?": "recommendations",
+        "How do I choose an analysis period?": "help",
+        "How do I safely delete test data?": "help",
+        "What does the forecasting page show?": "help",
+    }
+
+    assert suggestions == set(expected_categories)
+    for question, expected_category in expected_categories.items():
+        assert question.endswith("?")
+        response = chatbot.answer_question(question, transactions, products)
+        assert response.status == "answered", question
+        assert response.category == expected_category, question
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_rank", "expected_category", "expected_amount"),
+    [
+        ("What is our lowest expense?", "lowest", "Utilities", 20),
+        ("What is our highest expense?", "highest", "Rent", 80),
+    ],
+)
+def test_answers_highest_and_lowest_expense_category(
+    question, expected_rank, expected_category, expected_amount
+):
+    rows = [{
+        "date": date,
+        "record_type": "expense",
+        "product": "",
+        "category": category,
+        "quantity": 1,
+        "unit_price": amount,
+        "amount": amount,
+        "notes": "",
+    } for date, category, amount in [
+        ("2025-01-15", "Rent", 100),
+        ("2025-01-15", "Utilities", 50),
+        ("2025-02-15", "Rent", 80),
+        ("2025-02-15", "Utilities", 20),
+    ]]
+    transactions, _ = data.clean_transactions(pd.DataFrame(rows))
+
+    response = chatbot.answer_question(question, transactions, freq="monthly")
+
+    assert response.status == "answered"
+    assert response.category == "expenses"
+    assert expected_category in response.answer
+    assert response.evidence["ranked_category"] == {
+        "rank": expected_rank,
+        "category": expected_category,
+        "amount": expected_amount,
+    }
 
 
 def test_answers_profit_margins_and_refuses_unsupported_date_filter():

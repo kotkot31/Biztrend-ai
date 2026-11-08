@@ -76,7 +76,7 @@ The `biztrend.anomaly` module provides two review queues:
 - `detect_transaction_anomalies(transactions)` compares each sale with transactions for the same product and each expense with expenses in the same category, flagging unusual quantity or amount.
 - `detect_daily_demand_anomalies(transactions)` compares each product's daily units sold with its preceding active selling days to identify unusual demand patterns.
 
-Both use robust modified z-scores and the configurable `anomaly_zscore_threshold`. Comparison groups need at least `min_history_points` peers; daily demand uses prior active days only, excluding the day under evaluation. An empty result means no records passed the rule with sufficient comparison history, not proof that all activity is normal. Alerts are investigation aids, not findings of fraud or wrongdoing.
+Both use robust modified z-scores and the configurable `anomaly_zscore_threshold`. Transaction scores use sorted, rank-based leave-one-out baselines instead of rebuilding a baseline for every row, keeping large comparison groups practical while preserving the same scoring behavior. Comparison groups need at least `min_history_points` peers; daily demand uses prior active days only, excluding the day under evaluation. An empty result means no records passed the rule with sufficient comparison history, not proof that all activity is normal. Alerts are investigation aids, not findings of fraud or wrongdoing.
 
 ## Business assistant
 

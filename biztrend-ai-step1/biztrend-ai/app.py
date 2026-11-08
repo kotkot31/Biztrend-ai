@@ -178,19 +178,53 @@ st.markdown(
         border-right: 1px solid color-mix(in srgb, var(--biztrend-accent) 24%, transparent);
     }
 
+    [data-testid="stSidebar"] h1 {
+        margin-bottom: 0.2rem;
+        letter-spacing: -0.04em;
+        font-weight: 800;
+        background: linear-gradient(105deg, var(--biztrend-accent), var(--biztrend-blue) 56%, var(--biztrend-purple));
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    [data-testid="stSidebar"] h1 + div p {
+        color: color-mix(in srgb, var(--biztrend-text) 76%, var(--biztrend-accent));
+        font-weight: 550;
+    }
+
     [data-testid="stSidebar"] [role="radiogroup"] label {
+        border: 1px solid transparent;
+        border-left: 3px solid transparent;
         border-radius: 10px;
         padding: 0.35rem 0.55rem;
-        transition: background 140ms ease;
+        transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
     }
 
     [data-testid="stSidebar"] [role="radiogroup"] label:hover {
-        background: color-mix(in srgb, var(--biztrend-accent) 14%, transparent);
+        background: linear-gradient(
+            100deg,
+            color-mix(in srgb, var(--biztrend-accent) 16%, transparent),
+            color-mix(in srgb, var(--biztrend-blue) 10%, transparent)
+        );
+        border-color: color-mix(in srgb, var(--biztrend-accent) 24%, transparent);
+        transform: translateX(2px);
     }
 
     [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
-        background: color-mix(in srgb, var(--biztrend-accent) 20%, transparent);
-        border: 1px solid color-mix(in srgb, var(--biztrend-accent) 38%, transparent);
+        background: linear-gradient(
+            100deg,
+            color-mix(in srgb, var(--biztrend-accent) 24%, transparent),
+            color-mix(in srgb, var(--biztrend-blue) 14%, transparent) 72%,
+            color-mix(in srgb, var(--biztrend-purple) 10%, transparent)
+        );
+        border-color: color-mix(in srgb, var(--biztrend-accent) 38%, transparent);
+        border-left-color: var(--biztrend-accent);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--biztrend-accent) 8%, transparent);
+    }
+
+    [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p {
+        font-weight: 650;
     }
 
     [data-testid="stSidebar"] [data-baseweb="select"] > div {
@@ -950,10 +984,21 @@ def _render_anomalies(transactions: pd.DataFrame) -> None:
         else:
             st.dataframe(transaction_alerts, use_container_width=True, hide_index=True)
     with demand_tab:
+        st.caption(
+            "An infinite score means historical demand had no variation, "
+            "and the current value differs from that baseline."
+        )
         if demand_alerts.empty:
             st.info("No demand alerts met the configured threshold and history requirements.")
         else:
-            st.dataframe(demand_alerts, use_container_width=True, hide_index=True)
+            st.dataframe(
+                demand_alerts,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "expected_units": st.column_config.NumberColumn(format="%.0f"),
+                },
+            )
 
 
 def _render_assistant(transactions: pd.DataFrame, products: pd.DataFrame, freq: str) -> None:
@@ -983,12 +1028,12 @@ def _render_chatbot(
     freq: str,
     source: str,
 ) -> None:
-    st.title("BizTrend Q&A")
+    st.title("AI Support")
     st.caption(
         "Ask the chatbot about sales, expenses, profit, forecasts, inventory, "
-        "or unusual activity. Answers are based on available business data."
+        "or unusual activity."
     )
-    st.info(
+    st.caption(
         "Chat analyzes the full available transaction history. It cannot answer "
         "custom date ranges or forecast revenue/profit yet. Recommendations are "
         "advisory; it never places orders or executes financial actions."
@@ -1115,6 +1160,11 @@ def _render_chatbot(
                 response.suggestions if response.status != "error" else ()
             ),
         })
+    st.caption(
+        "AI-generated insights are estimates based on available data, not "
+        "guarantees or professional advice. Verify results before making "
+        "business decisions."
+    )
 
 
 def _save_transactions(
@@ -1357,9 +1407,9 @@ def _render_help() -> None:
     st.markdown(help_content.load_guide())
 
 
-st.title("BizTrend AI")
-st.caption("Business intelligence and predictive decision support")
 with st.sidebar:
+    st.title("BizTrend AI")
+    st.caption("Business intelligence and predictive decision support")
     st.header("Workspace")
     source = st.radio(
         "Data source",
@@ -1392,7 +1442,7 @@ with st.sidebar:
             "Inventory",
             "Anomaly review",
             "Business assistant",
-            "Chatbot",
+            "AI Support",
             "Data management",
             "Help & guide",
         ],
@@ -1425,7 +1475,7 @@ elif page == "Anomaly review":
     _render_anomalies(transactions)
 elif page == "Business assistant":
     _render_assistant(transactions, products, frequency)
-elif page == "Chatbot":
+elif page == "AI Support":
     _render_chatbot(transactions, products, frequency, source)
 elif page == "Data management":
     _render_data_management(transactions, products, source)

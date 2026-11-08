@@ -56,6 +56,68 @@ def _robust_zscore(values: np.ndarray, baseline: np.ndarray) -> np.ndarray:
     return scores
 
 
+def _quantile_without_rank(
+    sorted_values: np.ndarray,
+    removed_ranks: np.ndarray,
+    quantile: float,
+) -> np.ndarray:
+    """Calculate a linear quantile after removing each candidate value."""
+    remaining_count = len(sorted_values) - 1
+    position = (remaining_count - 1) * quantile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    lower_indices = lower + (removed_ranks <= lower)
+    upper_indices = upper + (removed_ranks <= upper)
+    fraction = position - lower
+    lower_values = sorted_values[lower_indices]
+    return lower_values + (sorted_values[upper_indices] - lower_values) * fraction
+
+
+def _robust_zscores_excluding_self(values: np.ndarray) -> np.ndarray:
+    """Score each value against all peers without repeatedly copying baselines."""
+    count = len(values)
+    sorted_values = np.sort(values)
+    order = np.argsort(values)
+    ranks = np.empty(count, dtype=int)
+    ranks[order] = np.arange(count)
+
+    medians = _quantile_without_rank(sorted_values, ranks, 0.5)
+    mads = np.full(count, np.nan, dtype=float)
+
+    for median in np.unique(medians):
+        if np.isnan(median):
+            continue
+        matching = medians == median
+        group_deviations = np.abs(values - median)
+        deviation_order = np.argsort(group_deviations)
+        deviation_ranks = np.empty(count, dtype=int)
+        deviation_ranks[deviation_order] = np.arange(count)
+        sorted_deviations = group_deviations[deviation_order]
+        mads[matching] = _quantile_without_rank(
+            sorted_deviations, deviation_ranks[matching], 0.5
+        )
+
+    scores = np.zeros(count, dtype=float)
+    has_mad = mads > 0
+    scores[has_mad] = (
+        0.6745 * (values[has_mad] - medians[has_mad]) / mads[has_mad]
+    )
+
+    needs_iqr = ~has_mad
+    if needs_iqr.any():
+        q25 = _quantile_without_rank(sorted_values, ranks, 0.25)
+        q75 = _quantile_without_rank(sorted_values, ranks, 0.75)
+        iqrs = q75 - q25
+        has_iqr = needs_iqr & (iqrs > 0)
+        scores[has_iqr] = (
+            (values[has_iqr] - medians[has_iqr]) / (iqrs[has_iqr] / 1.349)
+        )
+        no_spread = needs_iqr & ~has_iqr
+        scores[no_spread & (values > medians)] = np.inf
+        scores[no_spread & (values < medians)] = -np.inf
+    return scores
+
+
 def _canonical_transactions(transactions: pd.DataFrame) -> pd.DataFrame:
     missing = set(data.TRANSACTION_COLUMNS) - set(transactions.columns)
     if missing:
@@ -100,11 +162,9 @@ def detect_transaction_anomalies(
         indices = group.index.to_numpy()
         for metric in ("quantity", "amount"):
             values = pd.to_numeric(group[metric], errors="coerce").to_numpy(dtype=float)
+            scores = _robust_zscores_excluding_self(values)
             for position, row_index in enumerate(indices):
-                baseline = np.delete(values, position)
-                if len(baseline) < min_records:
-                    continue
-                score = float(_robust_zscore(values[position:position + 1], baseline)[0])
+                score = float(scores[position])
                 if abs(score) <= limit:
                     continue
                 alerts.append({
@@ -114,9 +174,9 @@ def detect_transaction_anomalies(
                     "anomaly_score": score,
                     "anomaly_reason": (
                         f"unusually {'high' if score > 0 else 'low'} {metric} "
-                        f"compared with {len(baseline)} similar records"
+                        f"compared with {len(values) - 1} similar records"
                     ),
-                    "peer_count": len(baseline),
+                    "peer_count": len(values) - 1,
                 })
 
     if not alerts:

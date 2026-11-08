@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -59,6 +60,46 @@ def test_transaction_detector_skips_groups_without_enough_peers():
 
     assert result.empty
     assert list(result.columns) == anomaly.TRANSACTION_ANOMALY_COLUMNS
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        np.array([1.0, 1.0, 1.0, 1.0, 10.0]),
+        np.array([1.0, 2.0, 3.0, 4.0, 5.0, 100.0]),
+        np.array([2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0]),
+        np.array([1.2, 1.8, 2.3, 5.6, 9.1, 100.0, 0.1]),
+    ],
+)
+def test_optimized_leave_one_out_scores_match_reference(values):
+    actual = anomaly._robust_zscores_excluding_self(values)
+    expected = np.array([
+        anomaly._robust_zscore(
+            values[index:index + 1], np.delete(values, index)
+        )[0]
+        for index in range(len(values))
+    ])
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+def test_optimized_scores_match_reference_for_randomized_groups():
+    random = np.random.default_rng(20261108)
+    for size in range(4, 25):
+        for values in (
+            random.normal(size=size),
+            random.integers(0, 5, size=size).astype(float),
+        ):
+            actual = anomaly._robust_zscores_excluding_self(values)
+            expected = np.array([
+                anomaly._robust_zscore(
+                    values[index:index + 1], np.delete(values, index)
+                )[0]
+                for index in range(size)
+            ])
+            np.testing.assert_allclose(
+                actual, expected, rtol=1e-12, atol=1e-12
+            )
 
 
 def test_daily_demand_detection_uses_only_prior_active_days():

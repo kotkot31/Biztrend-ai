@@ -55,6 +55,8 @@ _INTENT_TERMS = {
         "expense trend", "spending by categor", "spend by categor",
         "expenses by categor", "expense by categor",
         "review expense", "top expenses", "cost breakdown",
+        "highest expense", "largest expense", "lowest expense",
+        "smallest expense",
     ),
     "sales": (
         "sales", "sale", "revenue", "product", "top", "best-selling",
@@ -475,8 +477,7 @@ def _answer_financial(
             "expense_growth_warning": bool(latest["expense_growth_warning"]),
         },
         suggestions=(
-            "Review the underlying expense categories and source records before "
-            "making financial decisions.",
+            "Which expense category had the highest amount?",
         ),
         chart=_evidence_chart(
             chart_frame,
@@ -489,6 +490,7 @@ def _answer_financial(
 
 
 def _answer_expenses(
+    question: str,
     transactions: pd.DataFrame,
     freq: str,
     date_range: str,
@@ -513,6 +515,11 @@ def _answer_expenses(
     )
     latest_total = float(latest["amount"].sum())
     previous_total = float(previous["amount"].sum())
+    expense_rank = None
+    if re.search(r"\b(?:lowest|smallest)\b", question):
+        expense_rank = "lowest"
+    elif re.search(r"\b(?:highest|largest)\b", question):
+        expense_rank = "highest"
     latest["share_pct"] = (
         latest["amount"] / latest_total * 100 if latest_total else 0.0
     )
@@ -550,7 +557,25 @@ def _answer_expenses(
             f"No expenses were recorded in the latest {freq} period, "
             f"{_period_label(latest_period, freq)}. "
         )
+        ranked_category = None
+    elif expense_rank is not None:
+        row = (
+            latest.loc[latest["amount"].idxmin()]
+            if expense_rank == "lowest"
+            else latest.loc[latest["amount"].idxmax()]
+        )
+        ranked_category = {
+            "rank": expense_rank,
+            "category": str(row["category"]),
+            "amount": float(row["amount"]),
+        }
+        answer = (
+            f"The {expense_rank} recorded expense category in "
+            f"{_period_label(latest_period, freq)} was {row['category']}: "
+            f"{row['amount']:,.2f}. "
+        )
     else:
+        ranked_category = None
         top_categories = latest.nlargest(10, "amount")
         categories = ", ".join(
             (
@@ -574,7 +599,11 @@ def _answer_expenses(
         )
     answer += date_range
 
-    chart_frame = latest.nlargest(10, "amount")[["category", "amount"]].sort_values(
+    if expense_rank == "lowest":
+        chart_categories = latest.nsmallest(10, "amount")
+    else:
+        chart_categories = latest.nlargest(10, "amount")
+    chart_frame = chart_categories[["category", "amount"]].sort_values(
         "amount", ascending=True
     )
     return ChatResponse(
@@ -591,10 +620,11 @@ def _answer_expenses(
             ),
             "previous_total_expenses": previous_total,
             "categories": comparison.to_dict(orient="records"),
+            "ranked_category": ranked_category,
         },
         suggestions=(
-            "Compare category changes with the previous period and your budget.",
-            "Review uncategorized expenses and confirm cost-of-goods entries are labeled consistently.",
+            "Which expense category had the highest amount?",
+            "Which expense category had the lowest amount?",
         ),
         chart=(
             _evidence_chart(
@@ -828,8 +858,7 @@ def _answer_anomalies(
             ),
             evidence={"transaction_alerts": 0, "demand_alerts": 0},
             suggestions=(
-                "Review source records and business context; anomaly flags are "
-                "investigation aids, not proof of wrongdoing.",
+                "Are there unusual transactions?",
             ),
             chart=_evidence_chart(
                 alert_counts,
@@ -937,8 +966,7 @@ def _answer_recommendations(
             ]
         },
         suggestions=(
-            "Recommendations are advisory and depend on the quality and coverage "
-            "of the supplied data.",
+            "What business actions should I review?",
         ),
     )
 
@@ -1033,7 +1061,7 @@ def _answer_question(
     if intent == "financial":
         return _answer_financial(transactions, normalized, products, freq, date_range)
     if intent == "expense_analysis":
-        return _answer_expenses(transactions, freq, date_range)
+        return _answer_expenses(normalized, transactions, freq, date_range)
     if intent == "forecast":
         return _answer_forecast(transactions, normalized, products, freq, date_range)
     if intent == "inventory":

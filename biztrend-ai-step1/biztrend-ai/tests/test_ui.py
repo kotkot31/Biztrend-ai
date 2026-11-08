@@ -11,11 +11,25 @@ from biztrend import chatbot
 from biztrend import data, ui
 
 
+def test_branding_is_in_sidebar_not_repeated_in_main_content():
+    app_path = Path(__file__).resolve().parents[1] / "app.py"
+    app = AppTest.from_file(str(app_path)).run()
+
+    assert not app.exception
+    assert any(element.value == "BizTrend AI" for element in app.sidebar.title)
+    assert any(
+        element.value == "Business intelligence and predictive decision support"
+        for element in app.sidebar.caption
+    )
+    assert sum(element.value == "BizTrend AI" for element in app.title) == 1
+    assert any(element.value == "Business overview" for element in app.title)
+
+
 def test_chatbot_display_error_shows_neutral_message(monkeypatch, caplog):
     app_path = Path(__file__).resolve().parents[1] / "app.py"
     app = AppTest.from_file(str(app_path)).run()
     app.radio[0].set_value("Sample demo")
-    app.radio[1].set_value("Chatbot")
+    app.radio[1].set_value("AI Support")
     app.run()
 
     def fail_plot_render(*_args, **_kwargs):
@@ -30,6 +44,61 @@ def test_chatbot_display_error_shows_neutral_message(monkeypatch, caplog):
     assert chatbot.UNEXPECTED_ERROR_MESSAGE in [message.value for message in app.info]
     assert "private renderer detail" not in str(app)
     assert "private renderer detail" in caplog.text
+
+
+def test_chatbot_displays_muted_disclaimer_at_bottom_of_chat():
+    app_path = Path(__file__).resolve().parents[1] / "app.py"
+    app = AppTest.from_file(str(app_path)).run()
+    app.radio[0].set_value("Sample demo")
+    app.radio[1].set_value("AI Support")
+    app.run()
+
+    assert not app.exception
+    assert any(element.value == "AI Support" for element in app.title)
+    assert any(
+        element.value
+        == (
+            "Ask the chatbot about sales, expenses, profit, forecasts, "
+            "inventory, or unusual activity."
+        )
+        for element in app.caption
+    )
+    assert any(
+        "Chat analyzes the full available transaction history"
+        in element.value
+        and "it never places orders or executes financial actions."
+        in element.value
+        for element in app.caption
+    )
+    assert any(
+        "AI-generated insights are estimates based on available data"
+        in element.value
+        and "Verify results before making business decisions." in element.value
+        for element in app.caption
+    )
+
+
+def test_unusual_daily_demand_displays_expected_units_as_whole_numbers():
+    app_path = Path(__file__).resolve().parents[1] / "app.py"
+    app = AppTest.from_file(str(app_path), default_timeout=20).run()
+    app.radio[0].set_value("Sample demo")
+    app.radio[1].set_value("Anomaly review")
+    app.run(timeout=20)
+
+    assert not app.exception
+    assert any(
+        element.value
+        == (
+            "An infinite score means historical demand had no variation, "
+            "and the current value differs from that baseline."
+        )
+        for element in app.caption
+    )
+    demand_table = app.dataframe[1]
+    columns = json.loads(demand_table.proto.columns)
+    assert (
+        columns["expected_units"]["type_config"]["format"] == "%.0f"
+    )
 
 
 def test_executive_summary_page_renders_sample_business_overview():
